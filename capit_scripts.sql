@@ -1,6 +1,15 @@
-if exists ( select 1 from sysobjects where name='Capit_V_COLUMNS_DEFAULTS' and xtype = 'V')
-drop view Capit_V_COLUMNS_DEFAULTS
-go
+
+IF EXISTS
+		  (
+		   SELECT 1
+		   FROM sysobjects
+		   WHERE name = 'Capit_V_COLUMNS_DEFAULTS'
+				 AND xtype = 'V'
+		  ) 
+BEGIN
+	DROP VIEW Capit_V_COLUMNS_DEFAULTS
+END;
+GO
 /*
 Description
 ***********
@@ -11,27 +20,40 @@ Evolutions
 Pour faire évoluer cette vue, écrivez à info@capit.net
 
 */
-create View Capit_V_COLUMNS_DEFAULTS as 
-select  
-	so.name as constraint_name, 
-	st.name as table_name, 
-	sc.name as column_name, 
-	typ.name as column_type,
-	sc.length as column_length,
-	sm.text AS constraint_text
-from sysobjects so
-	inner join sysconstraints sd on so.id = sd.constid
-	inner join sysobjects st on st.id = sd.id
-	inner join syscolumns sc on sc.id = st.id and sc.colid = sd.colid
-	inner join syscomments sm on sm.id = sd.constid
-	inner join systypes typ on typ.xtype = sc.xtype
-where so.xtype = 'D'
-go
+CREATE VIEW Capit_V_COLUMNS_DEFAULTS
+AS SELECT so.name AS   constraint_name
+		, st.name AS   table_name
+		, sc.name AS   column_name
+		, typ.name AS  column_type
+		, sc.length AS column_length
+		, sm.text AS   constraint_text
+   FROM sysobjects AS so
+	   INNER JOIN sysconstraints AS sd
+		   ON so.id = sd.constid
+	   INNER JOIN sysobjects AS st
+		   ON st.id = sd.id
+	   INNER JOIN syscolumns AS sc
+		   ON sc.id = st.id
+			  AND sc.colid = sd.colid
+	   INNER JOIN syscomments AS sm
+		   ON sm.id = sd.constid
+	   INNER JOIN systypes AS typ
+		   ON typ.xtype = sc.xtype
+   WHERE so.xtype = 'D';
+GO
 
-if exists ( select * from sysobjects where name='Capit_sp_ConvertFormat' and xtype = 'P')
-drop procedure Capit_sp_ConvertFormat
+IF EXISTS
+		  (
+		   SELECT *
+		   FROM sysobjects
+		   WHERE name = 'Capit_sp_ConvertFormat'
+				 AND xtype = 'P'
+		  ) 
+BEGIN
+	DROP PROCEDURE Capit_sp_ConvertFormat
+END;
 
-go
+GO
 /*
 Description
 ***********
@@ -61,115 +83,134 @@ Exemple
 exec Capit_sp_ConvertFormat 'textes', 'd_creation', 'smalldatetime'
 
 */
-create procedure Capit_sp_ConvertFormat
-@TableName sysname,
-@columnName sysname,
-@FormatTo sysname,
-@bRaiseError bit = 0
-as
-declare @sSqlDropDefaultConstraint varchar(8000)
-declare @sSqlAddDefaultConstraint varchar(8000)
-declare @sSql varchar(8000)
-declare @constraint_name sysname
-Declare @column_default nvarchar(4000)
-Declare @sErrorMessage varchar(8000)
-declare @dataType sysname
-declare @severity tinyint
-declare @state tinyint
+CREATE PROCEDURE Capit_sp_ConvertFormat 
+				 @TableName   SYSNAME
+			   , @columnName  SYSNAME
+			   , @FormatTo    SYSNAME
+			   , @bRaiseError BIT     = 0
+AS
+BEGIN
+	DECLARE @sSqlDropDefaultConstraint VARCHAR(8000);
+	DECLARE @sSqlAddDefaultConstraint VARCHAR(8000);
+	DECLARE @sSql VARCHAR(8000);
+	DECLARE @constraint_name SYSNAME;
+	DECLARE @column_default NVARCHAR(4000);
+	DECLARE @sErrorMessage VARCHAR(8000);
+	DECLARE @dataType SYSNAME;
+	DECLARE @severity TINYINT;
+	DECLARE @state TINYINT;
 
--- Initialisation
+	-- Initialisation
 
-set @dataType = ''
-set @column_default= ''
-set @sSqlDropDefaultConstraint = ''
-set @sSqlAddDefaultConstraint = ''
-set @sSql = ''
+	SET @dataType = '';
+	SET @column_default = '';
+	SET @sSqlDropDefaultConstraint = '';
+	SET @sSqlAddDefaultConstraint = '';
+	SET @sSql = '';
 
--- Vérification de l'existence de la colonne et de son type
+	-- Vérification de l'existence de la colonne et de son type
 
-select @column_default = isnull(COLUMN_DEFAULT,''), @dataType = DATA_TYPE
-			from information_schema.columns 
-			where table_name = @TableName
-			and column_name = @ColumnName
+	SELECT @column_default = ISNULL(COLUMN_DEFAULT, '')
+		 , @dataType = DATA_TYPE
+	FROM information_schema.columns
+	WHERE table_name = @TableName
+		  AND column_name = @ColumnName;
 
--- La colonne n'existe pas
-if @dataType = ''
-begin
-	set @sErrorMessage = 'La colonne ' + @ColumnName + ' n''existe pas  dans la table '+@TableName
-	if @bRaiseError=1
-		RAISERROR ( @sErrorMessage, 1, 1)
-	else
-		print 	@sErrorMessage
-end
-else
-begin	
-	-- La colonne existe mais a déjà le type cible
-	if @dataType = @FormatTo
-	begin
-		print 'La colonne ' + @ColumnName + ' de la table '+@TableName + ' est déjà de type ' + @dataType
-	end
-	else
-	begin
-		-- dans le cas ou une contrainte par défaut est présente sur la colonne, il faut la supprimer	
-		if @column_default != ''
-		begin
-		   select @constraint_name = constraint_name
-			from Capit_V_COLUMNS_DEFAULTS 
-			where table_name = @tablename 
-			and column_name = @columnName
+	-- La colonne n'existe pas
+	IF @dataType = ''
+	BEGIN
+		SET @sErrorMessage = 'La colonne ' + @ColumnName + ' n''existe pas  dans la table ' + @TableName;
+		IF @bRaiseError = 1
+		BEGIN
+			RAISERROR(@sErrorMessage, 1, 1);
+		END
+			ELSE
+		BEGIN
+			PRINT @sErrorMessage;
+		END;
+	END;
+		ELSE
+	BEGIN	
+		-- La colonne existe mais a déjà le type cible
+		IF @dataType = @FormatTo
+		BEGIN
+			PRINT 'La colonne ' + @ColumnName + ' de la table ' + @TableName + ' est déjà de type ' + @dataType;
+		END;
+			ELSE
+		BEGIN
+			-- dans le cas ou une contrainte par défaut est présente sur la colonne, il faut la supprimer	
+			IF @column_default != ''
+			BEGIN
+				SELECT @constraint_name = constraint_name
+				FROM Capit_V_COLUMNS_DEFAULTS
+				WHERE table_name = @tablename
+					  AND column_name = @columnName;
 			
-			-- Construction de l'ordre pour supprimer la contrainte par defaut
-			set @sSqlDropDefaultConstraint = 'ALTER TABLE '+@tablename + ' drop CONSTRAINT ' + @constraint_name
+				-- Construction de l'ordre pour supprimer la contrainte par defaut
+				SET @sSqlDropDefaultConstraint = 'ALTER TABLE ' + @tablename + ' drop CONSTRAINT ' + @constraint_name;
 			
-			-- Construction de l'ordre pour remettre la contrainte par défaut
-			set @sSqlAddDefaultConstraint = 'ALTER TABLE '+@tablename +' ADD CONSTRAINT '+ @constraint_name+' DEFAULT '+@column_default+' FOR '+@columnName
-		end
+				-- Construction de l'ordre pour remettre la contrainte par défaut
+				SET @sSqlAddDefaultConstraint = 'ALTER TABLE ' + @tablename + ' ADD CONSTRAINT ' + @constraint_name + ' DEFAULT ' + @column_default + ' FOR ' + @columnName;
+			END;
 
 
-		if @sSqlDropDefaultConstraint != ''
-		begin
-			-- execution de la requête droppant la contrainte par défaut
-			print @sSqlDropDefaultConstraint
-			exec(  @sSqlDropDefaultConstraint )
-		end
+			IF @sSqlDropDefaultConstraint != ''
+			BEGIN
+				-- execution de la requête droppant la contrainte par défaut
+				PRINT @sSqlDropDefaultConstraint;
+				EXEC (@sSqlDropDefaultConstraint);
+			END;
 
-		set @sErrorMessage = ''
+			SET @sErrorMessage = '';
 
-		-- requête transformant le type de la colonne ( par exemple de DateTime en SmallDateTime )
-		set @sSql = 'Alter table ' + @tablename +' alter column ' + @columnName + ' ' + @FormatTo
-		print @sSql
-		begin try
-			exec( @sSql )	
-		end try
-		begin catch
-			set @sErrorMessage = 'Il n''a pas été possible de convertir la ' + @ColumnName + ' de la table '+@TableName + ' du type ' + @dataType + ' vers ' + @formatTo
-			set @sErrorMessage = @sErrorMessage + ' Error ' + convert(varchar,ERROR_NUMBER()) + ' Severity ' + convert(varchar,ERROR_SEVERITY()) + ' State ' + convert(varchar,ERROR_STATE()) + ' Procedure ' + convert(varchar,ERROR_PROCEDURE()) + ' Line ' + convert(varchar,ERROR_LINE() )+ ' Message ' +  convert(varchar,ERROR_MESSAGE()) 
-			set @severity = ERROR_SEVERITY()
-			set @state = ERROR_STATE()
-		end catch
+			-- requête transformant le type de la colonne ( par exemple de DateTime en SmallDateTime )
+			SET @sSql = 'Alter table ' + @tablename + ' alter column ' + @columnName + ' ' + @FormatTo;
+			PRINT @sSql;
+			BEGIN TRY
+				EXEC (@sSql);
+			END TRY
+			BEGIN CATCH
+				SET @sErrorMessage = 'Il n''a pas été possible de convertir la ' + @ColumnName + ' de la table ' + @TableName + ' du type ' + @dataType + ' vers ' + @formatTo;
+				SET @sErrorMessage = @sErrorMessage + ' Error ' + CONVERT(VARCHAR, ERROR_NUMBER()) + ' Severity ' + CONVERT(VARCHAR, ERROR_SEVERITY()) + ' State ' + CONVERT(VARCHAR, ERROR_STATE()) + ' Procedure ' + CONVERT(VARCHAR, ERROR_PROCEDURE()) + ' Line ' + CONVERT(VARCHAR, ERROR_LINE()) + ' Message ' + CONVERT(VARCHAR, ERROR_MESSAGE());
+				SET @severity = ERROR_SEVERITY();
+				SET @state = ERROR_STATE();
+			END CATCH;
 
-		if @sSqlAddDefaultConstraint != ''
-		begin
-			-- execution de la requête remettant la contrainte par défaut
-			print @sSqlAddDefaultConstraint
-			exec(  @sSqlAddDefaultConstraint )
-		end 
+			IF @sSqlAddDefaultConstraint != ''
+			BEGIN
+				-- execution de la requête remettant la contrainte par défaut
+				PRINT @sSqlAddDefaultConstraint;
+				EXEC (@sSqlAddDefaultConstraint);
+			END; 
 
-		-- Dans le cas ou il y a eu une erreur lors de la transformation, on soulève une erreur
-		if @sErrorMessage != ''
-		begin
-			if @bRaiseError=1
-				RAISERROR ( @sErrorMessage, @severity, @state)
-			else
-				print 	@sErrorMessage
-		end 
-	end
-end
-go
+			-- Dans le cas ou il y a eu une erreur lors de la transformation, on soulève une erreur
+			IF @sErrorMessage != ''
+			BEGIN
+				IF @bRaiseError = 1
+				BEGIN
+					RAISERROR(@sErrorMessage, @severity, @state);
+				END
+					ELSE
+				BEGIN
+					PRINT @sErrorMessage;
+				END;
+			END;
+		END;
+	END;
+END;
+GO
 
-if exists ( select * from sysobjects where name='Capit_sp_DateTimeToSmallDateTime' and xtype = 'P')
-drop procedure Capit_sp_DateTimeToSmallDateTime
-go
+IF EXISTS
+		  (
+		   SELECT *
+		   FROM sysobjects
+		   WHERE name = 'Capit_sp_DateTimeToSmallDateTime'
+				 AND xtype = 'P'
+		  ) 
+BEGIN
+	DROP PROCEDURE Capit_sp_DateTimeToSmallDateTime
+END;
+GO
 /*
 Description
 ***********
@@ -202,35 +243,52 @@ Exemple
 exec Capit_sp_DateTimeToSmallDateTime 'textes', 'd_creation'
 
 */
-create procedure Capit_sp_DateTimeToSmallDateTime
-@TableName sysname,
-@columnName sysname,
-@bRaiseError bit = 0
-as
-Declare @sErrorMessage varchar(8000)
-if not exists ( 
-	select 1
-	from information_schema.columns 
-	where table_name = @TableName
-	and column_name = @ColumnName
-	and data_type = 'datetime'	)
-begin
-	set @sErrorMessage = 'La colonne ' + @ColumnName + ' n''existe pas  dans la table '+@TableName + ' ou elle n''est pas de type DateTime '
-	if @bRaiseError = 1
-	begin
-		RAISERROR ( @sErrorMessage, 1, 1)
-	end
-	else
-	begin
-		print 	@sErrorMessage
-	end
-end
-else
-	exec Capit_sp_ConvertFormat @TableName, @columnName, 'smalldatetime', @bRaiseError
-go
-if exists ( select * from sysobjects where name='capit_sp_ConvertAllColumns' and xtype = 'P')
-drop procedure capit_sp_ConvertAllColumns
-go
+CREATE PROCEDURE Capit_sp_DateTimeToSmallDateTime 
+				 @TableName   SYSNAME
+			   , @columnName  SYSNAME
+			   , @bRaiseError BIT     = 0
+AS
+BEGIN
+	DECLARE @sErrorMessage VARCHAR(8000);
+	IF NOT EXISTS
+				  (
+				   SELECT 1
+				   FROM information_schema.columns
+				   WHERE table_name = @TableName
+						 AND column_name = @ColumnName
+						 AND data_type = 'datetime'
+				  ) 
+	BEGIN
+		SET @sErrorMessage = 'La colonne ' + @ColumnName + ' n''existe pas  dans la table ' + @TableName + ' ou elle n''est pas de type DateTime ';
+		IF @bRaiseError = 1
+		BEGIN
+			RAISERROR(@sErrorMessage, 1, 1);
+		END;
+			ELSE
+		BEGIN
+			PRINT @sErrorMessage;
+		END;
+	END;
+		ELSE
+	BEGIN
+		EXEC Capit_sp_ConvertFormat @TableName
+								  , @columnName
+								  , 'smalldatetime'
+								  , @bRaiseError;
+	END;
+END;
+GO
+IF EXISTS
+		  (
+		   SELECT *
+		   FROM sysobjects
+		   WHERE name = 'capit_sp_ConvertAllColumns'
+				 AND xtype = 'P'
+		  ) 
+BEGIN
+	DROP PROCEDURE capit_sp_ConvertAllColumns
+END;
+GO
 /*
 Description
 ***********
@@ -260,37 +318,52 @@ Exemples
 exec capit_sp_ConvertAllColumns 'DateTime','smalldatetime'
 
 */
-create procedure capit_sp_ConvertAllColumns
-@FormatFrom sysname,
-@FormatTo sysname
-as
-declare @columnname sysname
-declare @tablename sysname
+CREATE PROCEDURE capit_sp_ConvertAllColumns 
+				 @FormatFrom SYSNAME
+			   , @FormatTo   SYSNAME
+AS
+BEGIN
+	DECLARE @columnname SYSNAME;
+	DECLARE @tablename SYSNAME;
 
--- cursor listant toutes les colonnes du type recherché
-declare cCol cursor for
-	select col.table_name, col.column_name 
-	from information_schema.columns col
-			inner join information_schema.tables tab
-				on col.table_name = tab.table_name
-	where col.data_type = @FormatFrom
-	and tab.table_type = 'BASE TABLE'
-open cCol
-fetch next from cCol into @tablename, @columnName
+	-- cursor listant toutes les colonnes du type recherché
+	DECLARE cCol CURSOR
+	FOR SELECT col.table_name
+			 , col.column_name
+		FROM information_schema.columns AS col
+			INNER JOIN information_schema.tables AS tab
+				ON col.table_name = tab.table_name
+		WHERE col.data_type = @FormatFrom
+			  AND tab.table_type = 'BASE TABLE';
+	OPEN cCol;
+	FETCH NEXT FROM cCol INTO @tablename
+							, @columnName;
 
-while @@fetch_status = 0
-begin
-	print 'Convert ' + @tablename +'.' + @columnName + ' from ' + @FormatFrom + ' to ' + @FormatTo
-	-- conversion au format cible
-	exec Capit_sp_ConvertFormat @tablename, @columnName, @formatTo
-	fetch next from cCol into @tablename, @columnName
-end
-close cCol
-deallocate cCol
-go
-if exists ( select * from sysobjects where name='Capit_sp_DropColumn' and xtype = 'P')
-drop procedure Capit_sp_DropColumn
-go
+	WHILE @@fetch_status = 0
+	BEGIN
+		PRINT 'Convert ' + @tablename + '.' + @columnName + ' from ' + @FormatFrom + ' to ' + @FormatTo;
+		-- conversion au format cible
+		EXEC Capit_sp_ConvertFormat @tablename
+								  , @columnName
+								  , @formatTo;
+		FETCH NEXT FROM cCol INTO @tablename
+								, @columnName;
+	END;
+	CLOSE cCol;
+	DEALLOCATE cCol;
+END;
+GO
+IF EXISTS
+		  (
+		   SELECT *
+		   FROM sysobjects
+		   WHERE name = 'Capit_sp_DropColumn'
+				 AND xtype = 'P'
+		  ) 
+BEGIN
+	DROP PROCEDURE Capit_sp_DropColumn
+END;
+GO
 
 /*
 Description
@@ -320,85 +393,95 @@ Exemple
 exec Capit_sp_DropColumn 'textes', 'n_note'
 
 */
-create procedure Capit_sp_DropColumn
-@TableName sysname,
-@columnName sysname,
-@bRaiseError bit = 0
-as
-declare @sSqlDropDefaultConstraint varchar(8000)
-declare @sSql varchar(8000)
-declare @constraint_name sysname
-Declare @column_default nvarchar(4000)
-Declare @sErrorMessage varchar(8000)
-declare @dataType sysname
-declare @severity tinyint
-declare @state tinyint
+CREATE PROCEDURE Capit_sp_DropColumn 
+				 @TableName   SYSNAME
+			   , @columnName  SYSNAME
+			   , @bRaiseError BIT     = 0
+AS
+BEGIN
+	DECLARE @sSqlDropDefaultConstraint VARCHAR(8000);
+	DECLARE @sSql VARCHAR(8000);
+	DECLARE @constraint_name SYSNAME;
+	DECLARE @column_default NVARCHAR(4000);
+	DECLARE @sErrorMessage VARCHAR(8000);
+	DECLARE @dataType SYSNAME;
+	DECLARE @severity TINYINT;
+	DECLARE @state TINYINT;
 
--- Initialisation
+	-- Initialisation
 
-set @dataType = ''
-set @column_default= ''
-set @sSqlDropDefaultConstraint = ''
-set @sSql = ''
+	SET @dataType = '';
+	SET @column_default = '';
+	SET @sSqlDropDefaultConstraint = '';
+	SET @sSql = '';
 
--- Vérification de l'existence de la colonne et de son type
+	-- Vérification de l'existence de la colonne et de son type
 
-select @column_default = isnull(COLUMN_DEFAULT,''), @dataType = DATA_TYPE
-			from information_schema.columns 
-			where table_name = @TableName
-			and column_name = @ColumnName
+	SELECT @column_default = ISNULL(COLUMN_DEFAULT, '')
+		 , @dataType = DATA_TYPE
+	FROM information_schema.columns
+	WHERE table_name = @TableName
+		  AND column_name = @ColumnName;
 
--- La colonne n'existe pas
-if @dataType = ''
-begin
-	set @sErrorMessage = 'La colonne ' + @ColumnName + ' n''existe pas  dans la table '+@TableName
-	if @bRaiseError=1
-		RAISERROR ( @sErrorMessage, 1, 1)
-	else
-		print 	@sErrorMessage
-end
-else
-begin	
-	-- dans le cas ou une contrainte par défaut est présente sur la colonne, il faut la supprimer	
-	if @column_default != ''
-	begin
-	   select @constraint_name = constraint_name
-		from Capit_V_COLUMNS_DEFAULTS 
-		where table_name = @tablename 
-		and column_name = @columnName
+	-- La colonne n'existe pas
+	IF @dataType = ''
+	BEGIN
+		SET @sErrorMessage = 'La colonne ' + @ColumnName + ' n''existe pas  dans la table ' + @TableName;
+		IF @bRaiseError = 1
+		BEGIN
+			RAISERROR(@sErrorMessage, 1, 1);
+		END
+			ELSE
+		BEGIN
+			PRINT @sErrorMessage;
+		END;
+	END;
+		ELSE
+	BEGIN	
+		-- dans le cas ou une contrainte par défaut est présente sur la colonne, il faut la supprimer	
+		IF @column_default != ''
+		BEGIN
+			SELECT @constraint_name = constraint_name
+			FROM Capit_V_COLUMNS_DEFAULTS
+			WHERE table_name = @tablename
+				  AND column_name = @columnName;
 			
-		-- Construction de l'ordre pour supprimer la contrainte par defaut
-		set @sSqlDropDefaultConstraint = 'ALTER TABLE '+@tablename + ' drop CONSTRAINT ' + @constraint_name		
-	end
+			-- Construction de l'ordre pour supprimer la contrainte par defaut
+			SET @sSqlDropDefaultConstraint = 'ALTER TABLE ' + @tablename + ' drop CONSTRAINT ' + @constraint_name;
+		END;
 
-	set @sErrorMessage = ''
-	begin try
-	
-		if @sSqlDropDefaultConstraint != ''
-		begin
-			-- execution de la requête supprimant la contrainte par défaut
-			print @sSqlDropDefaultConstraint
-			exec(  @sSqlDropDefaultConstraint )
-		end
+		SET @sErrorMessage = '';
+		BEGIN TRY
 
-		-- requête supprimant la colonne 
-		set @sSql = 'Alter table ' + @tablename +' drop column ' + @columnName 
-		print @sSql
-		exec( @sSql )	
-	end try
-	begin catch
-			set @sErrorMessage = 'Il n''a pas été possible de supprimer la colonne ' + @ColumnName + ' de la table '+@TableName + ' de type ' + @dataType 
-			set @sErrorMessage = @sErrorMessage + ' Error ' + convert(varchar,ERROR_NUMBER()) + ' Severity ' + convert(varchar,ERROR_SEVERITY()) + ' State ' + convert(varchar,ERROR_STATE()) + ' Procedure ' + convert(varchar,ERROR_PROCEDURE()) + ' Line ' + convert(varchar,ERROR_LINE() )+ ' Message ' +  convert(varchar,ERROR_MESSAGE()) 
-			set @severity = ERROR_SEVERITY()
-			set @state = ERROR_STATE()
-			if @bRaiseError=1
-				RAISERROR ( @sErrorMessage, @severity, @state)
-			else
-				print 	@sErrorMessage
+			IF @sSqlDropDefaultConstraint != ''
+			BEGIN
+				-- execution de la requête supprimant la contrainte par défaut
+				PRINT @sSqlDropDefaultConstraint;
+				EXEC (@sSqlDropDefaultConstraint);
+			END;
 
-	end catch
+			-- requête supprimant la colonne 
+			SET @sSql = 'Alter table ' + @tablename + ' drop column ' + @columnName;
+			PRINT @sSql;
+			EXEC (@sSql);
+		END TRY
+		BEGIN CATCH
+			SET @sErrorMessage = 'Il n''a pas été possible de supprimer la colonne ' + @ColumnName + ' de la table ' + @TableName + ' de type ' + @dataType;
+			SET @sErrorMessage = @sErrorMessage + ' Error ' + CONVERT(VARCHAR, ERROR_NUMBER()) + ' Severity ' + CONVERT(VARCHAR, ERROR_SEVERITY()) + ' State ' + CONVERT(VARCHAR, ERROR_STATE()) + ' Procedure ' + CONVERT(VARCHAR, ERROR_PROCEDURE()) + ' Line ' + CONVERT(VARCHAR, ERROR_LINE()) + ' Message ' + CONVERT(VARCHAR, ERROR_MESSAGE());
+			SET @severity = ERROR_SEVERITY();
+			SET @state = ERROR_STATE();
+			IF @bRaiseError = 1
+			BEGIN
+				RAISERROR(@sErrorMessage, @severity, @state);
+			END
+				ELSE
+			BEGIN
+				PRINT @sErrorMessage;
+			END;
+		END CATCH;
 
-end
-go
+	END;
+END;
+GO
 
 
