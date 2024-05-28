@@ -98,14 +98,7 @@ update stats
 	PRINT @Sqlcommand;
 	EXEC sp_executesql @Sqlcommand;
 
-/*****************************
 
-shrink
-
-**************************/
-
-	PRINT 'shrinkDB';
-	EXEC p_shrinkDB;
 END;
 
 
